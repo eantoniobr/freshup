@@ -125,7 +125,6 @@
     <ClInclude Include="exception.h" />
     <ClInclude Include="gameplay.h" />
     <ClInclude Include="inventory.h" />
-    <ClInclude Include="item.h" />
     <ClInclude Include="itemdb.h" />
     <ClInclude Include="mail.h" />
     <ClInclude Include="pc.h" />
@@ -146,9 +145,6 @@
     <ClCompile Include="gameplay_chatroom.cpp" />
     <ClCompile Include="gameplay_stroke.cpp" />
     <ClCompile Include="inventory.cpp" />
-    <ClCompile Include="inventory_additem.cpp" />
-    <ClCompile Include="inventory_delitem.cpp" />
-    <ClCompile Include="item.cpp" />
     <ClCompile Include="itemdb.cpp" />
     <ClCompile Include="mail.cpp" />
     <ClCompile Include="pc.cpp" />

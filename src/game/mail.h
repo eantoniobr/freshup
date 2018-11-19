@@ -11,5 +11,5 @@ struct mail_data {
 	std::string message;
 };
 
-void pc_loadmail(pc* pc);
-void pc_readmail(pc* pc);
+void pc_req_loadmail(pc* pc);
+void pc_req_readmail(pc* pc);

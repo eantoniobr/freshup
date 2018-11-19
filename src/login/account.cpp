@@ -8,38 +8,31 @@
 #include "../common/db.h"
 #include "../common/packet.h"
 
-using namespace Poco::Data::Keywords;
-using namespace Poco::Data;
 
-account* pc_process = nullptr;
+void pc_req_login(pc* pc) {
+	std::string username = RTSTR(pc);
+	std::string password = RTSTR(pc);
 
-account::account(){}
-account::~account(){}
-
-void account::pc_login(pc* pc) {
-	std::string username = pc->read<std::string>();
-	std::string password = pc->read<std::string>();
-
-	Poco::Data::Session sess = sdb->get_session();
-	Poco::Data::Statement query(sess);
+	Statement query(*get_session());
 	query << "SELECT account_id, userid, user_pass, state, name, FirstSet FROM account WHERE userid = ?", use(username), now;
-	Poco::Data::RecordSet rs(query);
+	RecordSet rs(query);
 
-	// user not found
-	if ( (rs.rowCount() <= 0) || (username.compare(rs["userid"].toString()) != 0) ) {
+
+	// User is not found.
+	if ( (rs.rowCount() <= 0) || !STRCMP(username, rs["userid"].toString())) {
 		sclif->login_msg(pc, USER_NOT_FOUND);
 		pc->disconnect();
 		return;
 	}
 	
-	// password error
-	if (password.compare(rs["user_pass"].toString()) != 0) {
+	// Password is not match.
+	if ( !STRCMP(password, rs["user_pass"].toString()) ) {
 		sclif->login_msg(pc, INCORRECT_PASSWORD);
 		pc->disconnect();
 		return;
 	}
 
-	// user banned?
+	// User is banned.
 	if (rs["state"] > 0) {
 		sclif->login_msg(pc, USER_STATE_BAN);
 		pc->disconnect();
@@ -60,13 +53,12 @@ void account::pc_login(pc* pc) {
 	sys_send_data(pc);
 }
 
-// return true : name is not exist
-// return false : name is already existed
-bool account::sys_name_validation(std::string& name) {
-	Poco::Data::Session sess = sdb->get_session();
-	Poco::Data::Statement stm(sess);
+// Return true	: Name is not existed
+// Return false : Name is already existed
+bool sys_name_validation(std::string& name) {
+	Statement stm(*get_session());
 	stm << "SELECT 1 FROM account WHERE name = ?", use(name), now;
-	Poco::Data::RecordSet rs(stm);
+	RecordSet rs(stm);
 
 	if (rs.rowCount() <= 0) {
 		return true;
@@ -75,8 +67,8 @@ bool account::sys_name_validation(std::string& name) {
 	return false;
 }
 
-void account::pc_checkup_name(pc* pc) {
-	std::string name = pc->read<std::string>();
+void pc_checkup_name(pc* pc) {
+	std::string name = RTSTR(pc);
 
 	if (sys_name_validation(name)) {
 		sclif->send_name_available(pc, name);
@@ -86,8 +78,8 @@ void account::pc_checkup_name(pc* pc) {
 	sclif->send_name_taken(pc);
 }
 
-void account::pc_name_validation(pc* pc) {
-	std::string name = pc->read<std::string>();
+void pc_check_available(pc* pc) {
+	std::string name = RTSTR(pc);
 
 	if (sys_name_validation(name)) {
 		pc->set_name(name);
@@ -98,14 +90,13 @@ void account::pc_name_validation(pc* pc) {
 	sclif->send_name_validate_failed(pc);
 }
 
-void account::pc_request_create_char(pc* pc) {
-	unsigned __int32 char_typeid = pc->read<unsigned __int32>();
-	unsigned __int16 hair_colour = pc->read<unsigned __int16>();
+void pc_req_create_char(pc* pc) {
+	uint32 char_typeid = RTIU32(pc);
+	uint16 hair_colour = RTIU16(pc);
 
-	Poco::Data::Session sess = sdb->get_session();
-	Poco::Data::Statement stm(sess);
+	Statement stm(*get_session());
 	stm << "EXEC sys_firstset ?, ?, ?, ?", bind(pc->get_accountid()), bind(pc->get_name()), use(char_typeid), use(hair_colour), now;
-	Poco::Data::RecordSet rs(stm);
+	RecordSet rs(stm);
 
 	// error occurred
 	if (rs["ERROR_CODE"] > 0) {
@@ -113,20 +104,19 @@ void account::pc_request_create_char(pc* pc) {
 		return;
 	}
 
-	Packet packet;
-	packet.write<uint16>(0x11);
-	packet.write<uint8>(0);
-	pc->send_packet(&packet);
+	Packet p;
+	WTHEAD(&p, 0x11);
+	WTIU08(&p, 0);
+	pc->send_packet(&p);
 
 	sys_send_data(pc);
 }
 
-void account::sys_send_data(pc* pc) {
-	std::string game_key = utils::random_string(7);
-	std::string login_key = utils::random_string(7);
+void sys_send_data(pc* pc) {
+	std::string game_key = rnd_str(7);
+	std::string login_key = rnd_str(7);
 
-	Poco::Data::Session sess = sdb->get_session();
-	Poco::Data::Statement stm(sess);
+	Statement stm(*get_session());
 	stm << "UPDATE account SET game_key = ?, login_key = ?, logincount += 1, lastlogin = GETDATE() WHERE account_id = ?", 
 		use(game_key), use(login_key), bind(pc->get_accountid()), now;
 
@@ -142,10 +132,10 @@ void account::sys_send_data(pc* pc) {
 	sclif->send_hotkey(pc);
 }
 
-void account::pc_request_gamekey(pc* pc) {
-	Packet packet;
-	packet.write<uint16>(3);
-	packet.write<uint32>(0);
-	packet.write<std::string>(pc->game_key);
-	pc->send_packet(&packet);
+void pc_req_gamekey(pc* pc) {
+	Packet p;
+	WTHEAD(&p, 3);
+	WTIU32(&p, 0);
+	WTCSTR(&p, pc->game_key);
+	pc->send_packet(&p);
 }

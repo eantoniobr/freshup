@@ -14,34 +14,25 @@
 #include "../common/typedef.h"
 
 
-using namespace Poco::Data::Keywords;
-using namespace Poco::Data;
+void pc_req_login(pc* pc) {
+	std::string username = RTSTR(pc);
+	int account_id = RTIU32(pc);
+	RSKIP(pc, 6);
+	std::string login_key = RTSTR(pc);
+	std::string game_ver = RTSTR(pc);
+	RSKIP(pc, 8);
+	std::string game_key = RTSTR(pc);
 
-account* pc_process = nullptr;
-
-account::account(){}
-account::~account(){}
-
-void account::pc_login(pc* pc) {
-	std::string username = pc->read<std::string>();
-	int account_id = pc->read<int>();
-	pc->skip(6);
-	std::string login_key = pc->read<std::string>();
-	std::string game_ver = pc->read<std::string>();
-	pc->skip(8);
-	std::string game_key = pc->read<std::string>();
-
-	Poco::Data::Session sess = sdb->get_session();
-	Poco::Data::Statement stm(sess);
+	Statement stm(*get_session());
 	stm << "SELECT account_id, userid, name, capability, sex FROM account WHERE account_id=? AND userid=? AND login_key=? AND game_key=?", 
 		use(account_id), use(username), use(login_key), use(game_key), now;
-	Poco::Data::RecordSet rs(stm);
+	RecordSet rs(stm);
 	
 	if (rs.rowCount() <= 0) {
-		Packet packet;
-		packet.write<uint16>(630);
-		packet.write<uint32>(300);
-		pc->send_packet(&packet);
+		Packet p;
+		WTHEAD(&p, 630);
+		WTIU32(&p, 300);
+		pc->send_packet(&p);
 		pc->disconnect();
 		return;
 	}
@@ -59,17 +50,17 @@ void account::pc_login(pc* pc) {
 	channel_manager->send_channel(pc);
 
 
-	pc->warehouse->pc_load_data(pc);
-	pc->warehouse->pc_send_data(pc, IV_CHAR);
-	pc->warehouse->pc_send_data(pc, IV_ALLITEM);
-	pc->warehouse->pc_send_data(pc, IV_CARD);
-	pc->warehouse->pc_send_data(pc, IV_EQUIPMENT);
+	pc->warehouse->load_data(pc);
+	pc->warehouse->send_data(pc, IV_CHAR);
+	pc->warehouse->send_data(pc, IV_ALLITEM);
+	pc->warehouse->send_data(pc, IV_CARD);
+	pc->warehouse->send_data(pc, IV_EQUIPMENT);
 
 	// temporarily sync money
 	pc->sync_money();
 }
 
-void account::sys_send_pc_data(pc* pc) {
+void sys_send_pc_data(pc* pc) {
 	Packet packet;
 	packet.write<uint16>(0x44);
 	packet.write<uint8>(0);
@@ -116,7 +107,7 @@ void account::sys_send_pc_data(pc* pc) {
 	pc->send_packet(&packet);
 }
 
-void account::sys_send_jerk(pc* pc) {
+void sys_send_jerk(pc* pc) {
 	Packet packet;
 	packet.write_hex(&game_login1[0], sizeof(game_login1));
 	pc->send_packet(&packet);

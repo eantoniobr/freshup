@@ -30,9 +30,6 @@
     <ClInclude Include="inventory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="item.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="itemdb.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -78,15 +75,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="inventory.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="inventory_additem.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="inventory_delitem.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="item.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="itemdb.cpp">

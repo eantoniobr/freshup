@@ -22,7 +22,7 @@ game::game(std::shared_ptr<gamedata> const& data, uint16 room_id, std::string co
 	genkey();
 }
 
-void game::addmaster(pc* pc)
+void game::addmaster(pc *pc)
 {
 	pc_list.push_back(pc);
 	pc->game = this;
@@ -42,7 +42,7 @@ void game::addmaster(pc* pc)
 	channel->sys_pc_action(pc, lbUpdate);
 }
 
-void game::addpc(pc* pc) 
+void game::addpc(pc *pc)
 {
 	pc_list.push_back(pc);
 	pc->game = this;
@@ -67,18 +67,18 @@ void game::addpc(pc* pc)
 void game::genkey() 
 {
 	for (int i = 0; i < sizeof gameKey; ++i) {
-		gameKey[i] = utils::random_int(1, 255);
+		gameKey[i] = rnd_value(1, 255);
 	}
 }
 
-void game::send(Packet* p) 
+void game::send(Packet *p)
 {
 	std::for_each(pc_list.begin(), pc_list.end(), [p](pc* pc) {
 		pc->send_packet(p);
 	});
 }
 
-bool game::pc_remove(pc* pc) 
+bool game::pc_remove(pc *pc)
 {
 	auto it = std::find(pc_list.begin(), pc_list.end(), pc);
 	if (it == pc_list.end()) { return false; }
@@ -88,59 +88,57 @@ bool game::pc_remove(pc* pc)
 	return true;
 }
 
-void game::pc_action(pc* pc) {
+void game::pc_action(pc *pc) {
 	sys_verify_pc(pc);
 
-	uint8 action = pc->read<uint8>();
+	uint8 action = RTIU08(pc);
 
 	Packet p;
-	p.write<uint16>(0xc4);
-	p.write<uint32>(pc->connection_id_);
-	p.write<uint8>(action);
+	WTHEAD(&p, 0xC4);
+	WTIU32(&p, pc->connection_id_);
+	WTIU08(&p, action);
 
 	switch (action) {
 	case rPCMoveAround:
 	{
-		float pos = pc->read<float>();
-		p.write<float>(pos);
+		WTFLO(&p, RTFLO(pc));
 	}
 	break;
 	case rPCVSAnimate:
 	{
-		std::string animate = pc->read<std::string>();
-		p.write<std::string>(animate);
+		WTCSTR(&p, RTSTR(pc));
 	}
 	break;
 	case rPCAppear:
 	{
-		pc->read((char*)&pc->game_position.x, sizeof Pos3D);
-		p.write((char*)&pc->game_position.x, sizeof Pos3D);
+		RTPOINTER(pc, &pc->game_position.x, sizeof Pos3D);
+		WTPOINTER(&p, &pc->game_position.x, sizeof Pos3D);
 	}
 	break;
 	case rPCMove:
 	{
 		Pos3D pos;
-		pc->read((char*)&pos.x, sizeof Pos3D);
+		RTPOINTER(pc, &pos.x, sizeof Pos3D);
 		pc->game_position += pos;
-		p.write((char*)&pos.x, sizeof Pos3D);
+		WTPOINTER(&p, &pos.x, sizeof Pos3D);
 	}
 	break;
 	case rPCPosture:
 	{
-		pc->posture = pc->read<uint32>();
-		p.write<uint32>(pc->posture);
+		pc->posture = RTIU32(pc);
+		WTIU32(&p, pc->posture);
 	}
 	break;
 	case rPCAction:
 	{
-		std::string action = pc->read<std::string>();
-		p.write<std::string>(action);
+		std::string action = RTSTR(pc);
+		WTCSTR(&p, action);
 	}
 	break;
 	case rPCAnimation:
 	{
-		pc->animate = pc->read<uint32>();
-		p.write<uint32>(pc->animate);
+		pc->animate = RTIU32(pc);
+		WTIU32(&p, pc->animate);
 	}
 	break;
 	}
@@ -148,15 +146,61 @@ void game::pc_action(pc* pc) {
 	send(&p);
 }
 
-void game::sys_verify_pc(pc* pc) 
+void game::pc_change_game_config(pc *pc) {
+	RSKIP(pc, 2);
+
+	uint8 count = RTIU08(pc);
+
+	for (int i = 1; i <= count; ++i) {
+		uint8 action = RTIU08(pc);
+
+		switch (action) {
+		case rsName:
+		{
+			name = RTSTR(pc);
+		}
+		break;
+		case rsPwd:
+		{
+			password = RTSTR(pc);
+		}
+		break;
+		case rsMap:
+		{
+			map = RTIU08(pc);
+		}
+		break;
+		case rsMode:
+		{
+			mode = RTIU08(pc);
+		}
+		break;
+		case rsNatural:
+		{
+			natural = RTIU32(pc);
+		}
+		break;
+		}
+	}
+	gameupdate();
+	channel->sys_game_action(this, gUpdate);
+}
+
+void game::pc_chat(pc* pc, Packet *p) {
+	sys_verify_pc(pc);
+	send(p);
+}
+
+void game::sys_verify_pc(pc *pc)
 {
-	auto it = std::find(pc_list.begin(), pc_list.end(), pc);
-	if (it == pc_list.end()) throw "PC not found.";
+	if (!VECTOR_FIND(pc_list, pc)) {
+		throw "PC not found.";
+	}
 }
 
 void game::sys_inspec()
 {
-	if (pc_list.size() == 0) {
+	if ((uint8)pc_list.size() == 0) {
 		valid = false;
 		channel->sys_game_action(this, gDestroy);
 	}
@@ -165,84 +209,82 @@ void game::sys_inspec()
 void game::sys_weather(uint8 weather)
 {
 	Packet p;
-	p.write<uint16>(0x9e);
-	p.write<uint8>(weather);
-	p.write<uint16>(0);
-
+	WTHEAD(&p, 0x9E);
+	WTIU08(&p, weather);
+	WTIU16(&p, 0);
 	send(&p);
 }
 
 void game::gameupdate() 
 {
 	Packet p;
-	p.write<uint16>(0x4a);
-	p.write<int16>(-1);
-	p.write<uint8>(game_type);
-	p.write<uint8>(map);
-	p.write<uint8>(hole_total);
-	p.write<uint8>(mode);
-	p.write<uint32>(0); // natural mode
-	p.write<uint8>(maxplayer);
-	p.write<uint8>(30);
-	p.write<uint8>(0); // room idle
-	p.write<uint32>(vs_time);
-	p.write<uint32>(match_time);
-	p.write<uint32>(0); // trophy typeid
-	p.write<uint8>( password.length() > 0 ? 0 : 1 );
-	p.write<std::string>(name);
-
+	WTHEAD(&p, 0x4A);
+	WTI16(&p, -1);
+	WTIU08(&p, game_type);
+	WTIU08(&p, map);
+	WTIU08(&p, hole_total);
+	WTIU08(&p, mode);
+	WTIU32(&p, natural); // NATURAL MODE
+	WTIU08(&p, maxplayer);
+	WTIU08(&p, 30); // ??
+	WTIU08(&p, 0); // ROOM IDLE?
+	WTIU32(&p, vs_time);
+	WTIU32(&p, match_time);
+	WTIU32(&p, 0); // TROPHY TYPEID
+	WTIU08(&p, (uint8)password.length() > 0 ? 0 : 1);
+	WTCSTR(&p, name);
 	send(&p);
 }
 
-void game::roomdata(Packet* p) 
+void game::roomdata(Packet *p)
 {
-	p->write_string(name, 40);
-	p->write_null(24);
-	p->write<uint8>(password.length() > 0 ? 0 : 1);
-	p->write<uint8>( started ? 0 : 1);
-	p->write<uint8>(0); // orange
-	p->write<uint8>(maxplayer);
-	p->write<uint8>((uint8)pc_list.size());
-	p->write((char*)&gameKey[0], sizeof gameKey);
-	p->write<uint8>(0);
-	p->write<uint8>(0x1e);
-	p->write<uint8>(hole_total);
-	p->write<uint8>(game_type);
-	p->write<uint16>(roomId);
-	p->write<uint8>(mode);
-	p->write<uint8>(map);
-	p->write<uint32>(vs_time);
-	p->write<uint32>(match_time);
-	p->write<uint32>(0); // trophy
-	p->write<uint8>(0); // idile?
-	p->write<uint8>(0); // 1 = gm event , 0 = normal
-	p->write_null(0x4a);
-	p->write<uint32>(100);
-	p->write<uint32>(100);
-	p->write<uint32>(owner_uid);
-	p->write<uint8>(0xff); // practice?
-	p->write<uint32>(0); // artifact
-	p->write<uint32>(0); // natural mode
-	p->write<uint32>(0); // grandprix 1
-	p->write<uint32>(0); // grandprix 2
-	p->write<uint32>(0); // grandprix time
-	p->write<uint32>(0); // is grandprix?
+	WTFSTR(p, name, 40);
+	WTZERO(p, 24);
+	WTIU08(p, (uint8)password.length() > 0 ? 0 : 1);
+	WTIU08(p, started ? 0 : 1);
+	WTIU08(p, 0); // ORANGE ROOM ??
+	WTIU08(p, maxplayer);
+	WTIU08(p, (uint8)pc_list.size());
+	WTPOINTER(p, &gameKey[0], sizeof gameKey);
+	WTIU08(p, 0);
+	WTIU08(p, 0x1E);
+	WTIU08(p, hole_total);
+	WTIU08(p, game_type);
+	WTIU16(p, roomId);
+	WTIU08(p, mode);
+	WTIU08(p, map);
+	WTIU32(p, vs_time);
+	WTIU32(p, match_time);
+	WTIU32(p, 0); // THROPHY
+	WTIU08(p, 0); // IDILE?
+	WTIU08(p, 0); // 1 = GM EVENT , 0 = NORMAL
+	WTZERO(p, 0x4A);
+	WTIU32(p, 100);
+	WTIU32(p, 100);
+	WTIU32(p, owner_uid);
+	WTIU08(p, 0xFF); // PRACTICE?
+	WTIU32(p, 0); // ARTIFACT
+	WTIU32(p, natural);
+	WTIU32(p, 0); // GRANDPRIX 1
+	WTIU32(p, 0); // GRANDPRIX 2
+	WTIU32(p, 0); // GRANDPRIX TIME
+	WTIU32(p, 0); // IS GRANDPRIX
 }
 
-void game::sys_send_pcleave(pc* pc) {
+void game::sys_send_pcleave(pc *pc) {
 	Packet p;
-	p.write<uint16>(0x48);
-	p.write<int8>(2);
-	p.write<int16>(-1);
-	p.write<uint32>(pc->connection_id_);
+	WTHEAD(&p, 0x48);
+	WTIU08(&p, 2);
+	WTI16(&p, -1);
+	WTIU32(&p, pc->connection_id_);
 	send(&p);
 }
 
-void game::roomdata(pc* pc) 
+void game::roomdata(pc *pc)
 {
 	Packet p;
-	p.write<uint16>(0x49);
-	p.write<uint16>(0);
+	WTHEAD(&p, 0x49);
+	WTIU16(&p, 0);
 	roomdata(&p);
 	pc->send_packet(&p);
 }

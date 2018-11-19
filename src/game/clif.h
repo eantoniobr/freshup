@@ -3,11 +3,4 @@
 
 class pc;
 
-class clif {
-public:
-	clif();
-	~clif();
-
-};
-
-extern clif* sclif;
+void clif_pc_opencard_failed(pc *pc);

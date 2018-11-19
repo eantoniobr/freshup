@@ -33,37 +33,39 @@ public:
 
 	char gameKey[16];
 
-	void sys_verify_pc(pc* pc);
+	void sys_verify_pc(pc *pc);
 
 	void genkey();
-	void send(Packet* p);
+	void send(Packet *p);
 	void gameupdate();
-	void roomdata(pc* pc);
-	void roomdata(Packet* p);
+	void roomdata(pc *pc);
+	void roomdata(Packet *p);
 
-	virtual void send_pc_create(pc* pc) = 0;
-	virtual void send_pc_join(pc* pc) = 0;
+	virtual void send_pc_create(pc *pc) = 0;
+	virtual void send_pc_join(pc *pc) = 0;
 	virtual void sys_calc_pcslot() {};
 
-	bool pc_remove(pc* pc);
+	bool pc_remove(pc *pc);
 
-	void sys_send_pcleave(pc* pc);
+	void sys_send_pcleave(pc *pc);
 	void sys_weather(uint8 weather);
 	void sys_inspec();
 
-	Channel* channel = nullptr;
+	Channel *channel = nullptr;
 	game(std::shared_ptr<gamedata> const& data, uint16 room_id, std::string const& room_name, std::string const& room_pwd);
 
-	void addmaster(pc* pc);
-	void addpc(pc* pc);
+	void addmaster(pc *pc);
+	void addpc(pc *pc);
 
-	void pc_action(pc* pc);
+	void pc_action(pc *pc);
+	void pc_change_game_config(pc *pc);
+	void pc_chat(pc *pc, Packet *p);
 };
 
 class game_chatroom : public game {
 public:
-	void send_pc_create(pc* pc);
-	void send_pc_join(pc* pc);
+	void send_pc_create(pc *pc);
+	void send_pc_join(pc *pc);
 	//void sys_calc_pcslot() = 0;
 
 	game_chatroom(std::shared_ptr<gamedata> const& data, uint16 room_id, std::string const& room_name, std::string const& room_pwd);
@@ -71,11 +73,19 @@ public:
 
 class game_stroke : public game {
 public:
-	void send_pc_create(pc* pc);
-	void send_pc_join(pc* pc);
+	void send_pc_create(pc *pc);
+	void send_pc_join(pc *pc);
 	void sys_calc_pcslot();
 
 	game_stroke(std::shared_ptr<gamedata> const& data, uint16 room_id, std::string const& room_name, std::string const& room_pwd);
+};
+
+enum rSetting {
+	rsName = 0,
+	rsPwd = 1,
+	rsMap = 3,
+	rsMode = 5,
+	rsNatural = 14
 };
 
 enum roomErr {

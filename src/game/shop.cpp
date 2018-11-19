@@ -3,16 +3,14 @@
 #include "itemdb.h"
 #include "../common/packet.h"
 
-ShopSystem* shop = nullptr;
-
-void ShopSystem::pc_entershop(pc* pc) {
-	Packet packet;
-	packet.write<uint16>(0x20e);
-	packet.write_null(8); // ??
-	pc->send_packet(&packet);
+void pc_req_entershop(pc* pc) {
+	Packet p;
+	WTHEAD(&p, 0x20E);
+	WTZERO(&p, 8);
+	pc->send_packet(&p);
 }
 
-void ShopSystem::pc_buyitem(pc* pc) {
+void pc_req_buyitem(pc* pc) {
 	uint8 buy_type = pc->read<uint8>();
 	
 	switch (buy_type) {
@@ -25,49 +23,51 @@ void ShopSystem::pc_buyitem(pc* pc) {
 	}
 }
 
-void ShopSystem::pc_buyitem_normal(pc* pc) {
-	uint16 total = pc->read<uint16>();
-	uint32 item_amount = 0, pang_amount = 0, cookie_amount = 0;
+void pc_buyitem_normal(pc* pc) {
+	uint16 buy_total_item = RTIU16(pc);
+	uint32 item_amount = 0, pang_total = 0, cookie_total = 0;
 
-	buy_data buy[MAX_BUY];
+	buy_data item_buy[MAX_ITEM_BUY];
 
-	for (int i = 0; i < total; ++i) {
-		pc->read((char*)&buy[i].un1, sizeof buy_data);
-
-		printf("typeid = %d \n amount = %d \n price = %d \n", buy[i].item_typeid, buy[i].amount, buy[i].pang_price);
+	for (int i = 0; i < buy_total_item; ++i) {
+		pc->read((char*)&item_buy[i].un1, sizeof buy_data);
 	}
 
-	for (int i = 0; i < total; ++i) {
+	for (int i = 0; i < buy_total_item; ++i) {
 		// item exist?
-		if (!itemdb->exists(buy[i].item_typeid)) {
+		if (!itemdb->exists(item_buy[i].item_typeid)) {
 			send_msg(pc, BUY_FAIL);
 			return;
 		}
 		// item buyable?
-		else if (!itemdb->buyable(buy[i].item_typeid)) {
+		else if (!itemdb->buyable(item_buy[i].item_typeid)) {
 			send_msg(pc, CANNOT_BUY_ITEM);
 			return;
 		}
 
 		// sum pang and cookie
-		std::pair<char, uint32> price_data = itemdb->get_price(buy[i].item_typeid);
+		std::pair<char, uint32> price_data = itemdb->get_price(item_buy[i].item_typeid);
 
 		if (price_data.first == TYPE_PANG || price_data.first == TYPE_PANG2) {
-			buy[i].amount = itemdb->get_amount(buy[i].item_typeid) * buy[i].amount; // get real amount of the item : type pang
-			pang_amount += price_data.second * buy[i].amount;
+			item_buy[i].amount = itemdb->get_amount(item_buy[i].item_typeid) * item_buy[i].amount; // get real amount of the item : type pang
+			pang_total += price_data.second * item_buy[i].amount;
 		}
 		else if (price_data.first == TYPE_COOKIE) {
-			buy[i].amount = itemdb->get_amount(buy[i].item_typeid); // cookie amount should be static
-			cookie_amount += price_data.second;
+			item_buy[i].amount = itemdb->get_amount(item_buy[i].item_typeid); // Item Cookie Amount might be static
+			cookie_total += price_data.second;
 		}
 		else {
 			throw "Price type is invalid.";
 		}
 
-		printf("pang total %d, cookie total %d , amount is =%d\n", pang_amount, cookie_amount, itemdb->get_amount(buy[i].item_typeid));
+		printf("pang total %d, cookie total %d , amount is =%d\n", pang_total, cookie_total, itemdb->get_amount(item_buy[i].item_typeid));
+
+		item item;
+		item.type_id = item_buy[i].item_typeid;
+		item.amount = item_buy[i].amount;
 
 		// validate that pc can have this item
-		switch (pc->inventory->checkitem(pc, buy[i].item_typeid, buy[i].amount)) {
+		switch (pc->warehouse->additem(pc,  &item, true)) {
 		case CHECKITEM_PASS:
 			break;
 		case CHECKITEM_FAIL:
@@ -84,30 +84,49 @@ void ShopSystem::pc_buyitem_normal(pc* pc) {
 			break;
 		}
 	}
-
-	for (int i = 0; i < total; ++i) {
+	
+	for (int i = 0; i < buy_total_item; ++i) {
 		item item;
-		item.type_id = buy[i].item_typeid;
-		item.amount = buy[i].amount;
-		pc->inventory->additem(pc, &item, false, true);
+		item.type_id = item_buy[i].item_typeid;
+		item.amount = item_buy[i].amount;
+
+		ITEM_TRANSACTION tran = CREATE_SHARED(INV_TRANSACTION);
+		pc->warehouse->additem(pc, &item, false, &tran);
+		buyitem_result(pc, &tran, 0, 0);
 	}
 
 	send_msg(pc, BUY_SUCCESS, true);
 }
 
-void ShopSystem::pc_buyitem_rent(pc* pc) {
+void pc_buyitem_rent(pc* pc) {
 	uint16 total = pc->read<uint16>();
 }
 
-void ShopSystem::send_msg(pc* pc, uint32 code, bool success) {
-	Packet packet;
-	packet.write<uint16>(0x68);
-	packet.write<uint32>(code);
+void buyitem_result(pc* pc, ITEM_TRANSACTION* tran, uint16 day, uint8 flag) {
+	Packet p;
+	WTHEAD(&p, 0xAA);
+	WTIU16(&p, 1);
+	WTIU32(&p, (*tran)->item_typeid);
+	WTIU32(&p, (*tran)->item_id);
+	WTIU16(&p, day);
+	WTIU08(&p, flag);
+	WTIU16(&p, (*tran)->new_amount);
+	p.write_datetime((*tran)->timestamp_end);
+	WTFSTR(&p, (*tran)->ucc_unique, 9);
+	WTIU64(&p, 1000000); // pc pang
+	WTIU64(&p, 1000000); // pc cookie;
+	pc->send_packet(&p);
+}
+
+void send_msg(pc* pc, uint32 code, bool success) {
+	Packet p;
+	p.write<uint16>(0x68);
+	p.write<uint32>(code);
 
 	if (success) {
-		packet.write<uint64>(100000000);
-		packet.write<uint64>(100000000);
+		p.write<uint64>(100000000);
+		p.write<uint64>(100000000);
 	}
 
-	pc->send_packet(&packet);
+	pc->send_packet(&p);
 }

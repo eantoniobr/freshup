@@ -97,7 +97,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)plugin\boost;$(SolutionDir)plugin\Poco\Foundation\include;$(SolutionDir)plugin\Poco\Data\include;$(SolutionDir)plugin\Poco\Data\ODBC\include;$(SolutionDir)plugin\spdlog;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)plugin\boost;$(SolutionDir)plugin\Poco\Foundation\include;$(SolutionDir)plugin\Poco\Data\include;$(SolutionDir)plugin\Poco\Data\ODBC\include;$(SolutionDir)plugin\spdlog;C:\Qt\5.12.0\msvc2017\include;C:\Users\TOP-OUTER\Desktop\PangyaSRC\plugin\soci\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>POCO_STATIC;_WIN32_WINNT=0x0600;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -132,7 +132,6 @@
     <ClInclude Include="Semaphore.h" />
     <ClInclude Include="timer.h" />
     <ClInclude Include="typedef.h" />
-    <ClInclude Include="unique.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
@@ -142,7 +141,6 @@
     <ClCompile Include="ini_reader.cpp" />
     <ClCompile Include="packet.cpp" />
     <ClCompile Include="timer.cpp" />
-    <ClCompile Include="unique.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

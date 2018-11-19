@@ -2,7 +2,6 @@
 #include "account.h"
 #include "channel.h"
 #include "shop.h"
-#include "item.h"
 #include "mail.h"
 
 #include "Poco/Data/ODBC/ODBCException.h"
@@ -11,12 +10,16 @@
 #include "../common/asio.hpp"
 
 pc::pc(int con_id, Session *session) :
-	connection_id_(con_id), session_(session),
-	inventory(new Inventory()), account_id_(0),
-	warehouse(std::make_shared<PC_Warehouse>())
+	connection_id_(con_id), 
+	session_(session),
+	account_id_(0),
+	warehouse(CREATE_SHARED(PC_Warehouse))
 {}
 
 pc::~pc() { 
+
+	// save inventory data
+	warehouse->savedata(this);
 
 	if (channel_) {
 		if (game != nullptr) {
@@ -28,7 +31,6 @@ pc::~pc() {
 	}
 
 	spdlog::get("console")->warn("PC {} disconnected!", get_connection_id()); 
-	delete inventory;
 }
 
 int pc::get_connection_id() {
@@ -65,13 +67,15 @@ void pc::handle_packet(unsigned short bytes_recv) {
 	}
 	printf("\n");
 
+	Poco::Timestamp now;
+
 	try {
 		switch (packet_id) {
 		case packet::pc_send_message:
 			channel_->pc_send_message(this);
 			break;
 		case packet::pc_login:
-			pc_process->pc_login(this);
+			pc_req_login(this);
 			break;
 		case packet::pc_select_channel:
 			channel_manager->pc_select_channel(this);
@@ -81,6 +85,9 @@ void pc::handle_packet(unsigned short bytes_recv) {
 			break;
 		case packet::pc_join_game:
 			channel_->pc_join_game(this);
+			break;
+		case pc_game_config:
+			game_setting(this);
 			break;
 		case packet::pc_leave_room:
 			channel_->pc_leave_game(this);
@@ -101,19 +108,19 @@ void pc::handle_packet(unsigned short bytes_recv) {
 			channel_->sys_gm_command(this);
 			break;
 		case packet::pc_enter_shop:
-			shop->pc_entershop(this);
+			pc_req_entershop(this);
 			break;
 		case packet::pc_buyitem:
-			shop->pc_buyitem(this);
+			pc_req_buyitem(this);
 			break;
 		case packet::pc_open_cardpack:
-			pc_opencardpack(this);
+			itemdb->pc_use_cardpack(this);
 			break;
 		case packet::pc_loadmail_:
-			pc_loadmail(this);
+			pc_req_loadmail(this);
 			break;
 		case packet::pc_readmail_:
-			pc_readmail(this);
+			pc_req_readmail(this);
 			break;
 		default:
 			break;
@@ -135,47 +142,48 @@ void pc::handle_packet(unsigned short bytes_recv) {
 		disconnect();
 	}
 
+	Poco::Timestamp::TimeDiff diff = now.elapsed() / 1000;
+	spdlog::get("console")->info("PC last processed took {} = {}ms", now.elapsed(), diff);
+
 }
 
 void pc::gamedata(Packet* p, bool with_equip) {
-	p->write<uint32>(connection_id_);
-	p->write_string(name_, 0x10);
-	p->write_null(6);
-	p->write_string("", 0x15); // guild name
-	p->write<uint8>(game_slot);
-	p->write<uint32>(0);
-	p->write<uint32>(0); // title typeid
-	p->write<uint32>(warehouse->char_typeid_equiped());
-	p->write_null(0x14); // ?
-	p->write<uint32>(0); // title typeid
-	p->write<uint8>(game_role);
-	p->write<uint8>( game_ready ? 2 : 0 );
-	p->write<uint8>(31); // level
-	p->write<uint8>(0); // gm?
-	p->write<uint8>(10);
-	p->write<uint32>(0); // guild id
-	p->write_string("guildmark", 9);
-	p->write<uint32>(0);
-	p->write<uint32>(account_id_);
-	
-	p->write<uint32>(animate); // animation
-	p->write<uint16>(41485);
-	p->write<uint32>(posture); // posture?
-	p->write<float>(game_position.x); // x
-	p->write<float>(game_position.y); // y
-	p->write<float>(game_position.z); // z
-
-	p->write<uint32>(0);
-	p->write_string("store name", 0x1f);
-	p->write_null(0x21);
-	p->write<uint32>(0); // mascot typeid
-	p->write<uint8>(0); // pang mas
-	p->write<uint8>(0); // nitro pang
-	p->write<uint32>(0);
-	p->write_string(username_ + "@NT", 18);
-	p->write_null(0x6e);
-	p->write<uint32>(0); // maybe trophy ?
-	p->write<uint32>(66); // ??
+	WTIU32(p, connection_id_);
+	WTFSTR(p, name_, 0x10);
+	WTZERO(p, 6);
+	WTFSTR(p, "", 0x15); // guild name
+	WTIU08(p, game_slot);
+	WTIU32(p, 0);
+	WTIU32(p, 0); // title typeid
+	WTIU32(p, warehouse->char_typeid_equiped());
+	WTZERO(p, 0x14); // ?
+	WTIU32(p, 0); // title typeid
+	WTIU08(p, game_role);
+	WTIU08(p, game_ready ? 2 : 0);
+	WTIU08(p, 31); // level
+	WTIU08(p, 0); // GM
+	WTIU08(p, 10); // ??
+	WTIU32(p, 0); // GUILD ID
+	WTFSTR(p, "guildmark", 9);
+	WTIU32(p, 0);
+	WTIU32(p, account_id_);
+	WTIU32(p, animate);
+	WTIU16(p, 41485);
+	WTIU32(p, posture);
+	WTFLO(p, game_position.x);
+	WTFLO(p, game_position.y);
+	WTFLO(p, game_position.z);
+	WTIU32(p, 0);
+	WTFSTR(p, "STORE NAME", 0x1F);
+	WTZERO(p, 0x21);
+	WTIU32(p, 0); // MASCOT TYPEID
+	WTIU08(p, 0); // PANG MAS ENABLE
+	WTIU08(p, 0); // NITRO PANG MAS ENABLE
+	WTIU32(p, 0); // ?
+	WTFSTR(p, username_ + "@NT", 18);
+	WTZERO(p, 0x6E);
+	WTIU32(p, 0); // THOPHY ?
+	WTIU32(p, 66); // ??
 
 	if (with_equip) {
 		warehouse->write_current_char(p);

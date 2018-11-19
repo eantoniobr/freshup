@@ -1,11 +1,11 @@
 #include "clif.h"
-#include "pc.h"
-#include "static.h"
-#include "../common/typedef.h"
-#include "../common/db.h"
-#include "../common/packet.h"
+#include "pc.h" // pc class
+#include "../common/utils.h"
+#include "../common/packet.h" // Packet class
 
-clif* sclif = nullptr;
-
-clif::clif() {}
-clif::~clif() {}
+void clif_pc_opencard_failed(pc *pc) {
+	Packet p;
+	WTHEAD(&p, 0x154);
+	WTIU32(&p, 1);
+	pc->send_packet(&p);
+}

@@ -5,66 +5,68 @@
 
 void pk_leave_game(pc* pc) {
 	Packet p;
-	p.write<uint16>(0x4c);
-	p.write<int16>(-1);
+	WTHEAD(&p, 0x4C);
+	WTI16(&p, -1);
 	pc->send_packet(&p);
 }
 
 void room_error(pc* pc, roomErr err) {
 	Packet p;
-	p.write<uint16>(0x49);
-	p.write<uint8>((uint8) err);
+	WTHEAD(&p, 0x49);
+	WTIU08(&p, (uint8)err);
 	pc->send_packet(&p);
 }
 
 void Channel::pc_create_game(pc* pc)
 {
-	std::shared_ptr<gamedata> data = std::make_shared<gamedata>();
-	pc->read((char*)&data->un1, sizeof gamedata);
+	std::shared_ptr<gamedata> data = CREATE_SHARED(gamedata);
+	RTPOINTER(pc, &data->un1, sizeof gamedata);
+
 	printf("vs = %d | match = %d | hole total = %d | max player %d | type = %d \n", data->vs_time, data->match_time, data->hole_total, data->max_player, data->game_type);
 
-	game* game = nullptr;
+	int game_id = sys_get_game_id();
+
+	if (game_id == -1)
+		return; // Not enough game slot
 
 	switch (data->game_type) {
 	case gtStroke:
 	{
-		uint32 natural = pc->read<uint32>();
-		std::string name = pc->read<std::string>();
-		std::string pwd = pc->read<std::string>();
-		uint32 artifact = pc->read<uint32>();
-		game = new game_stroke(data, room_id->get(), name, pwd);
-		game->natural = natural;
+		uint32 natural = RTIU32(pc);
+		std::string name = RTSTR(pc);
+		std::string pwd = RTSTR(pc);
+		uint32 artifact = RTIU32(pc);
+		game_list[game_id] = new game_stroke(data, game_id, name, pwd);
+		game_list[game_id]->natural = natural;
 	}
 	break;
 	case gtChatroom:
 	{
-		uint32 natural = pc->read<uint32>();
-		std::string name = pc->read<std::string>();
-		std::string pwd = pc->read<std::string>();
-		uint32 artifact = pc->read<uint32>();
-		game = new game_chatroom(data, room_id->get(), name, pwd);
-		game->natural = natural;
+		uint32 natural = RTIU32(pc);
+		std::string name = RTSTR(pc);
+		std::string pwd = RTSTR(pc);
+		uint32 artifact = RTIU32(pc);
+		game_list[game_id] = new game_chatroom(data, game_id, name, pwd);
+		game_list[game_id]->natural = natural;
 	}
 	break;
 	}
 
-	if (!game) {
+	if (!game_list[game_id]) {
 		room_error(pc, rFail);
 		return;
 	}
 
-	game_list.push_back(game);
-
-	game->channel = this;
-	game->addmaster(pc);
+	game_list[game_id]->channel = this;
+	game_list[game_id]->addmaster(pc);
 }
 
 void Channel::pc_join_game(pc* pc) {
-	uint16 req_id = pc->read<uint16>();
-	std::string req_pwd = pc->read<std::string>();
+	uint16 req_id = RTIU16(pc);
+	std::string req_pwd = RTSTR(pc);
 	game* game = sys_getgame_byid(req_id);
 
-	if ( (game == nullptr) || (!game->valid)) {
+	if ( game == nullptr || !game->valid) {
 		room_error(pc, rNotExist);
 		return;
 	}
@@ -74,7 +76,8 @@ void Channel::pc_join_game(pc* pc) {
 		return;
 	}
 
-	if (game->password.compare(req_pwd) != 0) {
+	// if password not match or not gm
+	if ( game->password.compare(req_pwd) != 0 && pc->capability_ != 4) {
 		room_error(pc, rPwdErr);
 		return;
 	}
@@ -106,13 +109,13 @@ void Channel::pc_leave_game(pc* pc)
 void pc::change_equipment() 
 {
 	Packet p;
-	uint8 action = read<uint8>();
-	uint32 value = read<uint32>();
+	uint8 action = RTIU08(this);
+	uint32 value = RTIU32(this);
 
-	p.write<uint16>(0x4b);
-	p.write<uint32>(0);
-	p.write<uint8>(action);
-	p.write<uint32>(connection_id_);
+	WTHEAD(&p, 0x4B);
+	WTIU32(&p, 0);
+	WTIU08(&p, action);
+	WTIU32(&p, connection_id_);
 
 	switch (action) {
 	case e_char:
@@ -133,4 +136,11 @@ void pc_roomaction(pc* pc) {
 	if (pc->game == nullptr) 
 		return;
 	pc->game->pc_action(pc);
+}
+
+void game_setting(pc* pc) {
+	if (pc->game == nullptr)
+		return;
+
+	pc->game->pc_change_game_config(pc);
 }

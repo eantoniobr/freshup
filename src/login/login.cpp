@@ -5,21 +5,19 @@
 #include "reader.h"
 #include "account.h"
 #include "socket.h"
-#include "../common/unique.h"
 #include "../common/db.h"
 #include "../common/crypto.h"
 
 void signal_handler(int sig) {
-	delete unique_s;
-	delete sdb;
 	delete crypt;
 	delete config;
 	delete sclif;
-	delete pc_process;
-	delete pcs;
+	delete pc_manager;
+	db_final();
 }
 
 int main(int argc, char *argv[]) {
+
 	try {
 #ifdef SIGBREAK
 		signal(SIGBREAK, signal_handler);
@@ -28,13 +26,11 @@ int main(int argc, char *argv[]) {
 		signal(SIGTERM, signal_handler);
 
 		// Initializing
-		unique_s = new unique_id(10000);
-		sdb = new db();
+		db_init();
 		crypt = new Crypto();
 		config = new Config();
 		sclif = new clif();
-		pc_process = new account();
-		pcs = new pc_manager();
+		pc_manager = new PC_Manager();
 
 		auto console = spdlog::stdout_color_mt("console");
 

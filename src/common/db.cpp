@@ -1,17 +1,17 @@
 #include "db.h"
 
-db* sdb = nullptr;
+Poco::Data::SessionPool pooling("ODBC", "DSN=PANGYA_DSN;Uid=sa;Pwd=123456", 1, 32);
 
-db::db() : pool_("ODBC", "DRIVER={SQL Server};Server=DESKTOP-B9HNC4F;Database=PANGYA;User ID=sa;Password=123456", 1, 32) {
+session get_session() {
+	session sess = std::make_unique<Poco::Data::Session>(pooling.get());
+	sess->setFeature("forceEmptyString", true);
+	return sess;
+}
+
+void db_init() {
 	Poco::Data::ODBC::Connector::registerConnector();
 }
 
-db::~db() {
-	pool_.shutdown();
-}
-
-Poco::Data::Session db::get_session() {
-	Poco::Data::Session sess = pool_.get();
-	sess.setFeature("forceEmptyString", true);
-	return sess;
+void db_final() {
+	pooling.shutdown();
 }

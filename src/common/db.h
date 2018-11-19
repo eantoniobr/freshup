@@ -5,15 +5,13 @@
 #include "Poco/Data/ODBC/Connector.h"
 
 using namespace Poco::Data::Keywords;
+using Poco::Data::RecordSet;
+using Poco::Data::Statement;
 
-class db {
-private:
-	Poco::Data::SessionPool pool_;
+typedef std::unique_ptr<Poco:: Data::Session> session;
 
-public:
-	Poco::Data::Session get_session();
-	db();
-	~db();
-};
+void db_init();
+void db_final();
+session get_session();
 
-extern db* sdb;
+extern Poco::Data::SessionPool pooling;

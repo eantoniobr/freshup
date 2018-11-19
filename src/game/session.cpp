@@ -1,7 +1,6 @@
 #include "session.h"
 
 #include "../common/packet.h"
-#include "../common/unique.h"
 #include "../common/crypto.h"
 #include "../common/utils.h"
 
@@ -9,16 +8,14 @@
 #include "pc.h"
 #include "pc_manager.h"
 #include "static.h"
-Session::Session(boost::asio::io_context& io_context) : socket_(io_context), pc_(new pc(unique_s->get(), this)), key_(0) {}
+Session::Session(boost::asio::io_context& io_context) : socket_(io_context), key_(0), pc_(pc_manager->pc_new(this)) {}
 
 Session::pointer Session::create(boost::asio::io_context& io_context) {
 	return pointer(new Session(io_context));
 }
 
 Session::~Session() {
-	unique_s->store(pc_->get_connection_id());
-	pcs->pc_remove(pc_);
-	delete pc_;
+	pc_manager->pc_remove(pc_);
 }
 
 boost::asio::ip::tcp::socket& Session::get_socket() {
@@ -30,23 +27,20 @@ void Session::initialise() {
 	boost::asio::ip::tcp::no_delay option(true);
 	socket_.set_option(option);
 
-	// add to pc manager
-	pcs->pc_add(pc_);
-
-	// random key use to decrypt & encrypt packets
-	key_ = utils::random_int(1, 15);
+	// random key , uses for decrypt & encrypt packets
+	key_ = rnd_value(1, 15);
 
 	pc_->ip_ = socket_.remote_endpoint().address().to_string();
 
-	spdlog::get("console")->info("Connection {}:{} connected.", pc_->ip_, socket_.remote_endpoint().port());
+	spdlog::get("console")->info("Connection {}:{} connected with index {}", pc_->ip_, socket_.remote_endpoint().port(), pc_->connection_id_);
 
 	// send key to client
 	Packet p;
-	p.write<unsigned __int8>(0x00);
-	p.write<unsigned __int16>((unsigned __int16)pc_->ip_.length() + 8);
-	p.write_hex(&key_game[0], sizeof(key_game));
-	p.write<unsigned __int8>(key_); 
-	p.write<std::string>(pc_->ip_);
+	WTIU08(&p, 0x00);
+	WTIU16(&p, (uint16)pc_->ip_.length() + 8);
+	WTPHEX(&p, &key_game[0], sizeof key_game);
+	WTIU08(&p, key_);
+	WTCSTR(&p, pc_->ip_);
 	send_packet_undecrypt(&p);
 
 	read_header();

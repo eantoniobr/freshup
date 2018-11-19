@@ -1,19 +1,20 @@
 #pragma once
-#include <vector>
+
+#define MAX_PLAYER 2000
 
 class pc;
 class Session;
 class Packet;
 
-class pc_manager {
+class PC_Manager {
 private:
-	std::vector<pc*> pc_list_;
+	pc* pc_list[MAX_PLAYER] = {0};
 public:
-	pc_manager();
-	~pc_manager();
-	void pc_add(pc* pc);
+	PC_Manager();
+	~PC_Manager();
+	pc* pc_new(Session* session);
 	void pc_remove(pc* pc);
 	void broadcast(Packet* packet);
 };
 
-extern pc_manager* pcs;
+extern PC_Manager* pc_manager;

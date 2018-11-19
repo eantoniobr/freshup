@@ -2,18 +2,13 @@
 #include "../common/typedef.h"
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 #define NAME_MAX 40
 #define DATE_MAX 16
+#define MAX_RAND_GROUP 4
 
-const int CARD_MAX_PROB = 500;
-const int CARD_PROB[4] = { CARD_MAX_PROB, 50, 30, 10 };
-const int CARD_PACK1 = 2092957696;
-const int CARD_PACK2 = 2092957700;
-const int CARD_PACK3 = 2092957701;
-const int CARD_PACK4 = 2092957703;
-const int CARD_GRANDPRIX = 2092957704;
-const int CARD_FRESHUP = 2092957706;
+class pc;
 
 enum {
 	TYPE_INVALID = -1,
@@ -79,7 +74,7 @@ struct itemdb_normal {
 	struct itemdb_base base;
 	uint32 type;
 	char mpet[NAME_MAX];
-	uint16 status[5];
+	uint16 status[6];
 };
 
 struct itemdb_part {
@@ -157,6 +152,22 @@ struct magicbox {
 
 #pragma pack(pop)
 
+struct item_group_entry {
+	unsigned int id,
+		amount;
+	bool announce;
+};
+
+struct item_group_random {
+	std::vector<std::shared_ptr<item_group_entry>> data;
+};
+
+struct item_group_db {
+	unsigned int id;
+	std::vector<std::shared_ptr<item_group_entry>> must;
+	std::vector<std::shared_ptr<item_group_random>> random;
+};
+
 class ItemDB {
 private:
 	void readdb_normal();
@@ -165,23 +176,33 @@ private:
 	void readdb_ball();
 	void readdb_card();
 	void readdb_magicbox();
+
+	void _GroupDB_destroy();
 public:
 	ItemDB();
 
-	std::vector<std::shared_ptr<itemdb_normal>> item_;
-	std::vector<std::shared_ptr<itemdb_part>> part_;
-	std::vector<std::shared_ptr<itemdb_club>> club_;
-	std::vector<std::shared_ptr<itemdb_ball>> ball_;
-	std::vector<std::shared_ptr<itemdb_card>> card_;
-	std::vector<std::shared_ptr<magicbox>> magicbox_;
+	~ItemDB() {
+		_GroupDB_destroy();
+	}
+
+	std::map<uint32, std::shared_ptr<itemdb_normal>> item_data;
+	std::map<uint32, std::shared_ptr<itemdb_part>> part_data;
+	std::map<uint32, std::shared_ptr<itemdb_club>> club_data;
+	std::map<uint32, std::shared_ptr<itemdb_ball>> ball_data;
+	std::map<uint32, std::shared_ptr<itemdb_card>> card_data;
+	std::map<uint32, std::shared_ptr<magicbox>> magicbox_data;
+	std::unordered_map<uint32, item_group_db*> group_db;
+
+	void read_random_group(const char* path_to_file);
 	
 	bool exists(uint32 id);
 	bool buyable(uint32 id);
 	uint32 get_amount(uint32 id);
 	std::pair<char, uint32> get_price(uint32 id);
 
-	std::tuple<bool, uint32, uint32> get_cardpackdata(uint32 id);
+	std::pair<bool, uint32> cardpack_data(uint32 id);
 	std::vector<uint32> get_cardpack(uint32 id);
+	void pc_use_cardpack(pc* pc);
 };
 
 extern ItemDB* itemdb;

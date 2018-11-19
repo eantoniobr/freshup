@@ -5,7 +5,7 @@
 #include "Poco/Data/ODBC/ODBCException.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 
-pc::pc(int con_id, Session *session) : connection_id_(con_id), session_(session) { session_->disconnect(); }
+pc::pc(int con_id, Session *session) : connection_id_(con_id), session_(session) {  }
 
 pc::~pc() { spdlog::get("console")->warn("PC {} disconnected!", get_connection_id()); }
 
@@ -40,20 +40,20 @@ void pc::handle_packet(unsigned short bytes_recv) {
 
 	try {
 		switch (packet_id) {
-		case pc_login:
-			pc_process->pc_login(this);
+		case req_login:
+			pc_req_login(this);
 			break;
-		case pc_request_gamekey:
-			pc_process->pc_request_gamekey(this);
+		case req_gamekey:
+			pc_req_gamekey(this);
 			break;
-		case pc_name_validation:
-			pc_process->pc_name_validation(this);
+		case req_name_available:
+			pc_check_available(this);
 			break;
-		case pc_checkup_name:
-			pc_process->pc_checkup_name(this);
+		case req_checkup_name:
+			pc_checkup_name(this);
 			break;
-		case pc_request_char_creation:
-			pc_process->pc_request_create_char(this);
+		case req_char_creation:
+			pc_req_create_char(this);
 		default:
 			for (int i = 0; i < bytes_recv - 5; ++i) {
 				printf("%02x ", *(unsigned __int8*)(session_->get_receive_buffer() + i + 5));

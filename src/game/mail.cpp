@@ -6,21 +6,20 @@
 #include "../common/packet.h"
 #include "../common/db.h"
 
-void pc_loadmail(pc* pc) {
-	int page_select = pc->read<uint32>();
+void pc_req_loadmail(pc* pc) {
+	int page_select = RTIU32(pc);
 	int page_total = 0;
 
-	Poco::Data::Session sess = sdb->get_session();
-	Poco::Data::Statement stm(sess);
+	Poco::Data::Statement stm(*get_session());
 
-	/* select mail total from sql */
+	// select mail total from sql
 	stm << "SELECT COUNT(mail_id) AS MAIL_TOTAL FROM mail WHERE account_id = ?", into(page_total), use(pc->account_id_), now;
 
-	/* mail page total */
+	// mail page total
 	page_total = (uint32)ceil(page_total * 1.0 / 20);
 
-	/* select mail data */
-	Poco::Data::Statement stm2(sess);
+	// select mail data
+	Poco::Data::Statement stm2(*get_session());
 	stm2 << "SELECT A.mail_id, B.name, C.item_count,"
 		<< "typeid = ISNULL(D.typeid, 0), set_typeid = ISNULL(D.set_typeid, 0), amount = ISNULL(D.amount, 0), day = ISNULL(D.day, 0), ucc, "
 		<< "(CASE WHEN A.read_date IS NULL THEN 0 ELSE 1 END) AS mail_read "
@@ -40,43 +39,42 @@ void pc_loadmail(pc* pc) {
 
 	bool done = rs.moveFirst();
 
-	Packet packet;
-	packet.write<uint16>(0x211);
-	packet.write<uint32>(0);
-	packet.write<uint32>(page_select);
-	packet.write<uint32>(page_total);
-	packet.write<uint32>(rs.rowCount());
+	Packet p;
+	WTHEAD(&p, 0x211);
+	WTIU32(&p, 0);
+	WTIU32(&p, page_select);
+	WTIU32(&p, page_total);
+	WTIU32(&p, (uint32)rs.rowCount());
 
 	while (done) {
-		packet.write<uint32>(rs["mail_id"]);
-		packet.write_string(rs["name"], 16);
-		packet.write_null(0x74);
-		packet.write<uint8>(rs["mail_read"]); // is read?
-		packet.write<uint32>(rs["item_count"]); /// item count
-		packet.write<int>(-1);
-		packet.write<uint32>(rs["set_typeid"] > 0 ? rs["set_typeid"] : rs["typeid"]); // item typeid
-		packet.write<uint8>(rs["day"] > 0 ? 1 : 0); // timer?
-		packet.write<uint32>(rs["amount"]); // amount
-		packet.write <uint32>(rs["day"]); // day
-		packet.write_null(0x10);
-		packet.write<int>(-1);
-		packet.write<uint32>(0);
-		packet.write_string(rs["ucc"], 8); // ucc
-		packet.write_null(6);
+		WTIU32(&p, rs["mail_id"]);
+		WTFSTR(&p, rs["name"], 16);
+		WTZERO(&p, 0x74);
+		WTIU08(&p, rs["mail_read"]); // IS READ?
+		WTIU32(&p, rs["item_count"]); // ITEM COUNT
+		WTI32(&p, -1);
+		WTIU32(&p, rs["set_typeid"] > 0 ? rs["set_typeid"] : rs["typeid"]); // ITEM TYPEID
+		WTIU08(&p, rs["day"] > 0 ? 1 : 0); // TIMER?
+		WTIU32(&p, rs["amount"]); // AMOUNT
+		WTIU32(&p, rs["day"]);
+		WTZERO(&p, 0x10);
+		WTI32(&p, -1);
+		WTIU32(&p, 0);
+		WTFSTR(&p, rs["ucc"], 8); // UCC
+		WTZERO(&p, 6);
 		done = rs.moveNext();
 	}
 
-	pc->send_packet(&packet);
+	pc->send_packet(&p);
 }
 
-void pc_readmail(pc* pc) {
-	uint32 mail_id = pc->read<uint32>();
+void pc_req_readmail(pc* pc) {
+	uint32 mail_id = RTIU32(pc);
 
 	Packet p;
-	Poco::Data::Session sess = sdb->get_session();
 
 	{
-		Poco::Data::Statement stm(sess);
+		Poco::Data::Statement stm(*get_session());
 
 		stm << "SELECT A.account_id, A.mail_id, A.message, CONVERT(VARCHAR, A.reg_date) AS date, B.name FROM mail A "
 			<< "LEFT JOIN account B ON  B.account_id = A.sender "
@@ -86,34 +84,34 @@ void pc_readmail(pc* pc) {
 
 		if (rs.rowCount() <= 0) return;
 
-		p.write<uint16>(0x212);
-		p.write<uint32>(0);
-		p.write<uint32>(rs["mail_id"]);
-		p.write<std::string>(rs["name"]);
-		p.write<std::string>(rs["date"]);
-		p.write<std::string>(rs["message"]);
-		p.write<uint8>(1);
+		WTHEAD(&p, 0x212);
+		WTIU32(&p, 0);
+		WTIU32(&p, rs["mail_id"]);
+		WTCSTR(&p, rs["name"]);
+		WTCSTR(&p, rs["date"]);
+		WTCSTR(&p, rs["message"]);
+		WTIU08(&p, 1);
 	}
 
 	{
-		Poco::Data::Statement stm(sess);
+		Poco::Data::Statement stm(*get_session());
 		stm << "SELECT typeid, day, amount FROM mail_item WHERE mail_id = ?", use(mail_id), now;
 		Poco::Data::RecordSet rs(stm);
 		bool done = rs.moveFirst();
 
-		p.write<uint32>(rs.rowCount());
+		WTIU32(&p, (uint32) rs.rowCount());
 
 		while (done) {
-			p.write<uint32>(-1);
-			p.write<uint32>(rs["typeid"]);
-			p.write<uint8>(rs["day"] > 0 ? 1 : 0);
-			p.write<uint32>(rs["amount"]);
-			p.write<uint32>(rs["day"]);
-			p.write_null(16);
-			p.write<uint32>(-1);
-			p.write<uint32>(0);
-			p.write<uint32>(0x30);
-			p.write_null(10);
+			WTI32(&p, -1);
+			WTIU32(&p, rs["typeid"]);
+			WTIU08(&p, rs["day" > 0 ? 1 : 0]);
+			WTIU32(&p, rs["amount"]);
+			WTIU32(&p, rs["day"]);
+			WTZERO(&p, 16);
+			WTI32(&p, -1);
+			WTIU32(&p, 0);
+			WTIU32(&p, 0x30);
+			WTZERO(&p, 10);
 			done = rs.moveNext();
 		}
 	}

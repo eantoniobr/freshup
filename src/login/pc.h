@@ -73,9 +73,9 @@ class pc {
 };
 
 enum {
-	pc_login = 1,
-	pc_request_gamekey = 3,
-	pc_name_validation = 6,
-	pc_checkup_name = 7,
-	pc_request_char_creation = 8
+	req_login = 1,
+	req_gamekey = 3,
+	req_name_available = 6,
+	req_checkup_name = 7,
+	req_char_creation = 8
 };

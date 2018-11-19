@@ -39,7 +39,6 @@ class pc {
 		int connection_id_;
 		int account_id_;
 
-		Inventory* inventory;
 		std::shared_ptr<PC_Warehouse> warehouse;
 
 		std::string login_key;
@@ -115,6 +114,7 @@ enum packet {
 	pc_select_channel = 4,
 	pc_create_game_ = 8,
 	pc_join_game = 9,
+	pc_game_config = 10,
 	pc_change_equipment = 12,
 	pc_leave_room = 15,
 	pc_room_action = 99,
@@ -141,3 +141,4 @@ enum {
 
 // pc game function
 void pc_roomaction(pc* pc);
+void game_setting(pc* pc);
